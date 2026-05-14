@@ -6,13 +6,13 @@ Built for growth/PLG PMs running developer-facing API products. Particularly use
 
 ## What it does
 
-`diagnose` is the first subcommand. It takes:
+Three subcommands:
 
-- A **funnel definition** (YAML) describing the steps a developer moves through, plus a target step you're investigating
-- **Dropoff data** (JSON) with per-step counts, pass rates, and failure signals
-- The **product's artifacts** — docs, SDK source, error catalog — read from disk
+- **`diagnose`** takes a funnel definition (YAML), dropoff data (JSON), and the product's artifacts (docs, SDK source, error catalog) and produces a markdown report with 2-3 structurally distinct hypotheses. Each hypothesis is categorized against a four-layer model, grounded in specific `file:line` evidence AND specific dropoff signals, and carries an applyable structured edit spec.
+- **`apply`** takes a hypothesis report + a hypothesis ID and applies that hypothesis's structured edits to the live product artifacts. Validates every `expected_content` verbatim before writing; refuses to operate on a stale spec. Produces a markdown delta report.
+- **`iterate`** applies every applyable hypothesis from a report against the *same* product baseline, snapshotting and reverting between each, and produces a side-by-side comparison report. No winner is declared — the operator picks.
 
-…and produces a markdown report with 2-3 structurally distinct hypotheses, each categorized against a four-layer model, each grounded in specific file:line evidence AND specific dropoff signals, each with an applyable structured edit spec.
+The `apply` and `iterate` paths are mechanical and make no API calls; only `diagnose` consumes model tokens.
 
 ## The four layers
 
@@ -34,6 +34,8 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 ## Usage
 
+Diagnose:
+
 ```bash
 python -m funnel_researcher diagnose \
     --funnel examples/api_activation/funnel.yaml \
@@ -42,7 +44,26 @@ python -m funnel_researcher diagnose \
     --output-file outputs/pluma_diagnosis.md
 ```
 
-The product's artifacts are loaded with each line prefixed by its 1-indexed line number, which lets the hypothesis report cite `file:line` evidence a reader can actually verify against the live source.
+Apply one hypothesis:
+
+```bash
+python -m funnel_researcher apply \
+    --hypothesis-report outputs/pluma_diagnosis.md \
+    --hypothesis-id H1 \
+    --product fixtures/pluma_api \
+    --output-file outputs/pluma_apply_h1_delta.md
+```
+
+Iterate every applyable hypothesis (with snapshot/revert between each) for a side-by-side comparison:
+
+```bash
+python -m funnel_researcher iterate \
+    --hypothesis-report outputs/pluma_diagnosis.md \
+    --product fixtures/pluma_api \
+    --output-file outputs/pluma_iteration.md
+```
+
+The product's artifacts are loaded with each line prefixed by its 1-indexed line number, which lets the hypothesis report cite `file:line` evidence a reader can actually verify against the live source. `apply` and `iterate` then validate each edit's `expected_content` against the live file before any write.
 
 ## Report shape
 
@@ -61,7 +82,7 @@ Each report has:
 
 [`examples/api_activation/`](examples/api_activation/) is the canonical worked example. It runs against a fictional agentic-API product (`fixtures/pluma_api/`) where the target dropoff step is `first_successful_agent_run`. The product is deliberately imperfect — `agent_id` setup buried in a separate doc, error messages that name the problem but not the path to the fix, an SDK `run()` signature that hides a precondition, a README quickstart that reads as linear when agent creation is a branch, and a scoped-keys concept introduced only in the error catalog.
 
-`examples/api_activation/diagnosis.md` is the actual diagnose run output: three hypotheses spanning Layers 2 and 3, all with `applyable: true` structured edits, every file:line citation verified against the fixture source. See [the example's README](examples/api_activation/README.md) for the full breakdown and how to reproduce it.
+`examples/api_activation/diagnosis.md` is the actual diagnose run output: three hypotheses spanning Layers 2 and 3, all with `applyable: true` structured edits, every file:line citation verified against the fixture source. `examples/api_activation/iteration.md` is the iterate run output for the same report: all three hypotheses applied cleanly against the fixture, with the per-edit diffs side by side. See [the example's README](examples/api_activation/README.md) for the full breakdown and how to reproduce both.
 
 ## Forbidden hypothesis patterns
 
@@ -86,7 +107,7 @@ Before returning a report, the model walks eight self-checks: evidence-supports-
 python -m pytest tests/
 ```
 
-Tests cover loaders (funnel + dropoff parsing), the product reader, the prompt assembler (line numbering, brace survival, field substitution), and the hypothesis agent (via a stub client; no API calls in tests).
+Tests cover loaders (funnel + dropoff parsing), the product reader, the prompt assembler (line numbering, brace survival, field substitution), the hypothesis agent (via a stub client; no API calls in tests), the applier (action handling, expected-content verification, snapshot/restore, overlap detection), the iterator (per-hypothesis snapshot isolation, error containment), and the CLI surface for all three subcommands.
 
 ## Methodology
 

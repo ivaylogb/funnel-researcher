@@ -1,8 +1,9 @@
 """CLI entry point for funnel-researcher.
 
-Phase 1 shipped the `diagnose` subcommand. Phase 2 adds `apply`, which
-takes a hypothesis report + ID, validates and applies the structured edits
-mechanically, and writes a delta report. `iterate` follows in Phase 3.
+Phase 1 shipped `diagnose` (hypothesis generation). Phase 2 added `apply`
+(structured edits + delta report). Phase 3 adds `iterate` (apply every
+applyable hypothesis against the same baseline, snapshotting and reverting
+between each, producing a side-by-side comparison).
 """
 
 from __future__ import annotations
@@ -13,8 +14,10 @@ import sys
 from pathlib import Path
 
 from .applier import ApplyError, apply_edits, parse_hypothesis_edits
+from .comparison import render_comparison
 from .delta import render_delta
 from .hypothesis_agent import DEFAULT_MAX_TOKENS, DEFAULT_MODEL, generate_hypotheses
+from .iterator import iterate_report
 from .loaders import load_dropoff, load_funnel
 from .product_reader import read_product
 
@@ -107,12 +110,42 @@ def main(argv: list[str] | None = None) -> int:
         help="Validate and render the delta report without writing changes to product files.",
     )
 
+    iterate_cmd = subparsers.add_parser(
+        "iterate",
+        help="Apply every applyable hypothesis against the same baseline and produce a side-by-side comparison.",
+    )
+    iterate_cmd.add_argument(
+        "--hypothesis-report",
+        required=True,
+        type=Path,
+        help="Path to the markdown diagnosis report produced by `diagnose`.",
+    )
+    iterate_cmd.add_argument(
+        "--product",
+        required=True,
+        type=Path,
+        help="Path to the product artifact directory the edits target.",
+    )
+    iterate_cmd.add_argument(
+        "--output-file",
+        required=True,
+        type=Path,
+        help="Where to write the markdown comparison report.",
+    )
+    iterate_cmd.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Validate and render the comparison without writing changes to product files at any point.",
+    )
+
     args = parser.parse_args(argv)
 
     if args.command == "diagnose":
         return _run_diagnose(args)
     if args.command == "apply":
         return _run_apply(args)
+    if args.command == "iterate":
+        return _run_iterate(args)
 
     parser.error(f"Unknown command: {args.command}")
     return 2
@@ -207,6 +240,61 @@ def _run_apply(args) -> int:
     print(
         f"[apply: hypothesis {hypothesis_id}, {len(applied)} edit(s) across "
         f"{n_files} file(s){suffix}; delta report → {output_path}]"
+    )
+    return 0
+
+
+def _run_iterate(args) -> int:
+    report_path: Path = args.hypothesis_report
+    product_dir: Path = args.product
+    output_path: Path = args.output_file
+    dry_run: bool = args.dry_run
+
+    if not report_path.is_file():
+        print(f"hypothesis report not found: {report_path}", file=sys.stderr)
+        return 2
+    if not product_dir.is_dir():
+        print(f"product directory not found: {product_dir}", file=sys.stderr)
+        return 2
+
+    try:
+        results = iterate_report(report_path, product_dir, dry_run=dry_run)
+    except (ValueError, FileNotFoundError) as e:
+        print(f"iterate failed: {e}", file=sys.stderr)
+        return 3
+
+    n_applied = sum(
+        1 for r in results
+        if r.applyable and r.applied_edits and not r.error
+    )
+    n_skipped = sum(1 for r in results if not r.applyable and not r.error)
+    n_errored = sum(1 for r in results if r.error)
+
+    comparison = render_comparison(
+        results, report_path=report_path, product_dir=product_dir, dry_run=dry_run,
+    )
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(comparison)
+
+    # Exit 5: no useful comparison. Either the report had no hypotheses or
+    # every applyable hypothesis errored during apply. The comparison file is
+    # still written so the operator can see why.
+    if not results or (n_applied == 0 and n_skipped == 0):
+        if not results:
+            msg = "no hypotheses found in report"
+        else:
+            msg = f"all {n_errored} hypothesis(es) errored during apply"
+        print(
+            f"iterate: {msg} — comparison written to {output_path}",
+            file=sys.stderr,
+        )
+        return 5
+
+    suffix = " (dry run)" if dry_run else ""
+    print(
+        f"[iterate: {len(results)} hypothesis(es), {n_applied} applied / "
+        f"{n_skipped} skipped / {n_errored} errored{suffix}; "
+        f"comparison → {output_path}]"
     )
     return 0
 
