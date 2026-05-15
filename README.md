@@ -1,5 +1,7 @@
 # funnel-researcher
 
+*Reference implementation of [agent-diagnosis-spec](https://github.com/ivaylogb/agent-diagnosis-spec) v0.1.*
+
 A failure-diagnosis tool for developer-API activation funnels. When developers drop off at a specific step in an API or agent-platform onboarding, this reads the funnel definition, the dropoff data, and the product's artifacts (docs, SDK source, error catalog), and produces structured hypotheses about why — with `file:line` evidence and applyable edit specs.
 
 Built for growth/PLG PMs running developer-facing API products. Particularly useful for agentic APIs, agent platforms, and developer tools where traditional funnel analytics doesn't translate cleanly because "the user" is a developer integrating, "the events" are API calls and SDK errors, and the behavior of interest is what the developer's code does over time.
