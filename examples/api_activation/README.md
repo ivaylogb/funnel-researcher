@@ -1,6 +1,6 @@
 # Worked example: Pluma API activation funnel
 
-This example diagnoses developer dropoff at the `first_successful_agent_run` step of a fictional agentic-API product (Pluma). The product is in `fixtures/pluma_api/` and is deliberately imperfect in specific ways that produce the dropoff signals in the data.
+This example diagnoses developer dropoff at the `first_successful_agent_run` step of a sample API surface (Pluma). The product is in `fixtures/pluma_api/` and is deliberately imperfect in specific ways that produce the dropoff signals in the data.
 
 ## Running diagnose
 

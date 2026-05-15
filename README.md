@@ -4,7 +4,7 @@
 
 A failure-diagnosis tool for developer-API activation funnels. When developers drop off at a specific step in an API or agent-platform onboarding, this reads the funnel definition, the dropoff data, and the product's artifacts (docs, SDK source, error catalog), and produces structured hypotheses about why — with `file:line` evidence and applyable edit specs.
 
-Built for growth/PLG PMs running developer-facing API products. Particularly useful for agentic APIs, agent platforms, and developer tools where traditional funnel analytics doesn't translate cleanly because "the user" is a developer integrating, "the events" are API calls and SDK errors, and the behavior of interest is what the developer's code does over time.
+Built for diagnosing developer APIs. Particularly useful for agentic APIs, agent platforms, and developer tools where traditional funnel analytics doesn't translate cleanly because "the user" is a developer integrating, "the events" are API calls and SDK errors, and the behavior of interest is what the developer's code does over time.
 
 ## What it does
 
@@ -82,7 +82,7 @@ Each report has:
 
 ## Worked example
 
-[`examples/api_activation/`](examples/api_activation/) is the canonical worked example. It runs against a fictional agentic-API product (`fixtures/pluma_api/`) where the target dropoff step is `first_successful_agent_run`. The product is deliberately imperfect — `agent_id` setup buried in a separate doc, error messages that name the problem but not the path to the fix, an SDK `run()` signature that hides a precondition, a README quickstart that reads as linear when agent creation is a branch, and a scoped-keys concept introduced only in the error catalog.
+[`examples/api_activation/`](examples/api_activation/) is the canonical worked example. It runs against a sample API surface (`fixtures/pluma_api/`) where the target dropoff step is `first_successful_agent_run`. The product is deliberately imperfect — `agent_id` setup buried in a separate doc, error messages that name the problem but not the path to the fix, an SDK `run()` signature that hides a precondition, a README quickstart that reads as linear when agent creation is a branch, and a scoped-keys concept introduced only in the error catalog.
 
 `examples/api_activation/diagnosis.md` is the actual diagnose run output: three hypotheses spanning Layers 2 and 3, all with `applyable: true` structured edits, every file:line citation verified against the fixture source. `examples/api_activation/iteration.md` is the iterate run output for the same report: all three hypotheses applied cleanly against the fixture, with the per-edit diffs side by side. See [the example's README](examples/api_activation/README.md) for the full breakdown and how to reproduce both.
 
