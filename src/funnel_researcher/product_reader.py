@@ -22,6 +22,34 @@ from pathlib import Path
 
 SUPPORTED_SDK_EXTENSIONS = {".py", ".ts", ".js", ".tsx", ".jsx", ".rb", ".go", ".java"}
 
+# Text-like extensions ingested when a file sits at the product root.
+TOP_LEVEL_TEXT_EXTENSIONS = {
+    ".md", ".markdown", ".rst", ".txt", ".yaml", ".yml", ".json",
+}
+
+# Top-level files owned by a dedicated ProductArtifacts field. The generic
+# root scan skips these so they are not ingested twice: README is `readme`,
+# openapi.* is `openapi`, and errors.yaml is an `error_catalog` candidate.
+_TOP_LEVEL_RESERVED = {"README.md", "openapi.yaml", "openapi.json", "errors.yaml"}
+
+
+def _is_ingestable_top_level(path: Path) -> bool:
+    """True for a root-level product file that should join the doc surface.
+
+    Generic by extension, not by a fixed name list. Hidden files, backups,
+    and compiled artifacts are excluded — none of those forms carry an
+    extension in TOP_LEVEL_TEXT_EXTENSIONS (e.g. `.foo`, `errors.md.bak`,
+    `errors.md~`, `*.pyc` all fail the suffix check). Files already owned by
+    a dedicated field are skipped.
+    """
+    if not path.is_file():
+        return False
+    if path.name.startswith("."):
+        return False
+    if path.name in _TOP_LEVEL_RESERVED:
+        return False
+    return path.suffix.lower() in TOP_LEVEL_TEXT_EXTENSIONS
+
 
 @dataclass
 class ProductArtifacts:
@@ -48,6 +76,16 @@ def read_product(product_dir: Path, extra_files: list[Path] | None = None) -> Pr
         for f in sorted(docs_dir.rglob("*.md")):
             rel = f.relative_to(product_dir).as_posix()
             docs[rel] = f.read_text()
+
+    # Top-level documentation files (e.g. a root-level errors.md or
+    # glossary.md) are part of the product surface too. Ingest them
+    # generically by extension so callers don't have to know which exact
+    # filenames the loader special-cases; files owned by a dedicated field
+    # (README, openapi, errors.yaml) are skipped. setdefault keeps any
+    # docs/ entry authoritative if names ever collide.
+    for f in sorted(product_dir.iterdir()):
+        if _is_ingestable_top_level(f):
+            docs.setdefault(f.relative_to(product_dir).as_posix(), f.read_text())
 
     sdk_files = {}
     sdk_dir = product_dir / "sdk"
