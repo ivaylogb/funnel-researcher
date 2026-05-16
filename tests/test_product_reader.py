@@ -108,3 +108,22 @@ def test_read_product_supports_typescript_sdk(tmp_path: Path) -> None:
 
     assert "sdk/client.ts" in artifacts.sdk_files
     assert "sdk/agents.ts" in artifacts.sdk_files
+
+
+def test_read_product_ingests_top_level_files(tmp_path: Path) -> None:
+    """A documentation file at the root of the product directory (not under
+    docs/) must reach the assembled surface. Regression: a top-level
+    errors.md was silently dropped because the loader only scanned docs/,
+    sdk/, and a fixed error-catalog name list — so integration-watcher and
+    funnel-researcher never saw a root-level errors.md."""
+    product = tmp_path / "api"
+    (product / "docs").mkdir(parents=True)
+    (product / "docs" / "quickstart.md").write_text("# Quickstart\nstep 1\n")
+    (product / "errors.md").write_text("# Errors\nERR_MISSING_AGENT_ID\n")
+
+    artifacts = read_product(product)
+
+    assert "errors.md" in artifacts.docs
+    assert artifacts.docs["errors.md"] == "# Errors\nERR_MISSING_AGENT_ID\n"
+    # Subdirectory docs are unaffected by the top-level scan.
+    assert "docs/quickstart.md" in artifacts.docs
